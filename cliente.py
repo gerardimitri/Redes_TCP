@@ -1,5 +1,6 @@
+from audioop import add
 import socket
-
+from utils import * 
 
 class Mascota:
     def __init__(self):
@@ -57,58 +58,25 @@ mi_gata.set_from_str("gato smol")
 mi_gata.set_peso(6)
 print(mi_gata.is_chonky())
 
-localIP       = "127.0.0.1"
-localPort     = 10000
-bufferSize    = 1024
-msgFromServer = str(input("Archivo a enviar: "))
-bytesToSend   = str.encode(msgFromServer)
-sendBuffSize  = 16
-# Create a datagram socket
-UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+print('Creando socket - Cliente')
+my_address = ('localhost', 10000)
+# armamos el socket, los parámetros que recibe el socket indican el tipo de conexión
+client_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
 
-# Bind to address and ip
-UDPServerSocket.bind((localIP, localPort))
-print("UDP server up and listening")
+# mandamos un mensajito
+print("... Mandamos cositas")
 
-def send_full_file(file_name, udp_socket, buffsize):
-    with open(file_name, "rb") as f:
-        while True:
-            data = f.read(buffsize)
-            if not data:
-                break
-            udp_socket.sendto(data, (localIP, localPort))
+# definimos un mensaje y una secuencia indicando el fin del mensaje
+message = str(input("Archivo a enviar: "))
+end_of_message = "¿"
 
-def send_full_message(message, udp_socket, buffsize, address):
-    while True:
-        data = message[:buffsize]
-        if not data:
-            break
-        udp_socket.sendto(data, address)
-        message = message[buffsize:]
+# socket debe recibir bytes, por lo que encodeamos el mensaje
+send_message = (message + end_of_message).encode()
 
+# enviamos el mensaje a través del socket
+send_full_message(client_socket, send_message, end_of_message, my_address, buff_size_client)
+print("... Mensaje enviado")
 
-# Listen for incoming datagrams
-while(True):
-    bytesAddressPair = UDPServerSocket.recvfrom(bufferSize)
-    message = bytesAddressPair[0]
-    address = bytesAddressPair[1]
-    clientMsg = "Message from Client:{}".format(message)
-    clientIP  = "Client IP Address:{}".format(address)   
-    print(clientMsg)
-    print(clientIP)
-    # Sending a reply to client
-    send_full_message(bytesToSend, UDPServerSocket, sendBuffSize, address)
-    #UDPServerSocket.sendto(bytesToSend, address)
-
-# # CLIENT
-# client_socketTCP = SocketType.SocketTCP()
-# client_socketTCP.connect(address)
-# # test 1
-# message = "Mensje de len=16".encode()
-# client_socketTCP.send(message)
-# # test 2
-# message = "Mensaje de largo 19".encode()
-# client_socketTCP.send(message)
-# # test 3
-# message = "Mensaje de largo 19".encode()
-# client_socketTCP.send(message)
+# y esperamos una respuesta
+received_message, destination_address = receive_full_mesage(client_socket, buff_size_client, end_of_message)
+print(' -> Respuesta del servidor: <<' + message.decode() + '>>')
