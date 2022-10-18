@@ -28,3 +28,4 @@ while True:
     send_full_message(server_socket, response_message, end_of_message, server_address, buff_size_client)
     print("... Mensaje enviado")
     # seguimos esperando por si llegan otras conexiones
+    break
