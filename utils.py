@@ -1,8 +1,9 @@
+import socketTCP
 # definimos variables que tanto el servidor como el cliente van a usar
 buff_size_server = 16
 buff_size_client = 16
 # cambiamos el end_of_message por | en vez de \n para no tener problemas con los saltos de línea del archivo
-end_of_message = "|"
+end_of_message = "/"
 
 # modificamos la función para que sirva para sockets no orientados a conexión
 def receive_full_mesage(connection_socket, buff_size, end_of_message):
