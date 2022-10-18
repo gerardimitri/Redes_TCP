@@ -1,38 +1,8 @@
-import random
-
 # definimos variables que tanto el servidor como el cliente van a usar
 buff_size_server = 16
 buff_size_client = 16
 # cambiamos el end_of_message por | en vez de \n para no tener problemas con los saltos de línea del archivo
 end_of_message = "|"
-
-
-# modificamos la función para que sirva para sockets no orientados a conexión
-def recv_con_perdidas(socket, buff_size, loss_probability):
-    while True:
-        # recibimos el mensaje y su dirección de origen
-        buffer, address = socket.recvfrom(buff_size)
-        # sacamos un número entre 0 y 100 de forma aleatoria
-        random_number = random.randint(0, 100)
-        # si el random_number es menor o igual a la probabilidad de perdida omitimos el mensaje (hacemos como que no llegó)
-        if random_number <= loss_probability:
-            continue
-        # de lo contrario salimos del loop y retornamos
-        else:
-            break
-    return buffer, address
-
-
-# modificamos la función para que sirva para sockets no orientados a conexión (notemos que cambió su firma)
-def send_con_perdidas(socket, address, message_in_bytes, loss_probability):
-    # sacamos un número entre 0 y 100 de forma aleatoria
-    random_number = random.randint(0, 100)
-    # si el random_number es mayor o igual a la probabilidad de perdida enviamos el mensaje
-    if random_number >= loss_probability:
-        socket.sendto(message_in_bytes, address)
-    else:
-        print("oh no, pérdida de: {}".format(message_in_bytes))
-
 
 # modificamos la función para que sirva para sockets no orientados a conexión
 def receive_full_mesage(connection_socket, buff_size, end_of_message):

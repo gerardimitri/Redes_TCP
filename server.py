@@ -26,6 +26,5 @@ while True:
     # respondemos lo mismo y le volvemos a añadir el end_of_message
     response_message = received_message + end_of_message.encode()
     send_full_message(server_socket, response_message, end_of_message, server_address, buff_size_client)
-    print("Se ha hecho eco del mensaje")
-
+    print("... Mensaje enviado")
     # seguimos esperando por si llegan otras conexiones

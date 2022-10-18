@@ -67,8 +67,11 @@ client_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
 print("... Mandamos cositas")
 
 # definimos un mensaje y una secuencia indicando el fin del mensaje
-message = str(input("Archivo a enviar: "))
-end_of_message = "¿"
+filename = str(input("Archivo a enviar: "))
+message = ""
+with open(filename, "r") as file:
+    message = file.read()
+end_of_message = "|"
 
 # socket debe recibir bytes, por lo que encodeamos el mensaje
 send_message = (message + end_of_message).encode()
@@ -79,4 +82,4 @@ print("... Mensaje enviado")
 
 # y esperamos una respuesta
 received_message, destination_address = receive_full_mesage(client_socket, buff_size_client, end_of_message)
-print(' -> Respuesta del servidor: <<' + message.decode() + '>>')
+print(' -> Respuesta del servidor: <<' + received_message.decode() + '>>')
