@@ -32,5 +32,47 @@ class SocketTCP:
         segment += dict_segment['data']
         return segment
     
+    def bind(self, address):
+        self.origin_address = address
+        self.socketUDP.bind(address)
+    
+    def connect(self, address):
+        self.destination_address = address
+        tcp_dict = {}
+        tcp_dict['ACK'] = 0
+        tcp_dict['SYN'] = 1
+        tcp_dict['FIN'] = 0
+        tcp_dict['sequence'] = self.sequence
+        self.sequence += 1
+        tcp_dict['data'] = ""
+        message = self.create_segment(tcp_dict)
+        self.socketUDP.sendto(message.encode(), address)
+        while True:
+            buffer, address = self.socketUDP.recvfrom(1024)
+            buffer = buffer.decode()
+            tcp_dict = self.parse_segment(buffer)
+            if tcp_dict['ACK'] == 1:
+                break
+        print("Connected to server")
+    
+    def accept(self):
+        while True:
+            buffer, address = self.socketUDP.recvfrom(1024)
+            buffer = buffer.decode()
+            tcp_dict = self.parse_segment(buffer)
+            if tcp_dict['SYN'] == 1:
+                break
+        self.destination_address = address
+        tcp_dict['ACK'] = 1
+        tcp_dict['SYN'] = 0
+        tcp_dict['FIN'] = 0
+        tcp_dict['sequence'] = self.sequence
+        self.sequence += 1
+        tcp_dict['data'] = ""
+        message = self.create_segment(tcp_dict)
+        self.socketUDP.sendto(message.encode(), address)
+        print("Connected to client")
+        return self
+    
 
     

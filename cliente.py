@@ -1,11 +1,10 @@
-from audioop import add
-import socket
-from utils import * 
+from utils import *
+from socketTCP import SocketTCP
 
 print('Creando socket - Cliente')
 my_address = ('localhost', 10000)
 # armamos el socket, los parámetros que recibe el socket indican el tipo de conexión
-client_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+client_socket = SocketTCP()
 
 # mandamos un mensajito
 print("... Mandamos cositas")
@@ -24,5 +23,5 @@ send_full_message(client_socket, send_message, end_of_message, my_address, buff_
 print("... Mensaje enviado")
 
 # y esperamos una respuesta
-received_message, destination_address = receive_full_mesage(client_socket, buff_size_client, end_of_message)
+received_message, destination_address = receive_full_mesage(client_socket, buff_size_receive, end_of_message)
 print(' -> Respuesta del servidor: <<' + received_message.decode() + '>>')
