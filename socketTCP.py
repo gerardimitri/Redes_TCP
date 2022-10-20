@@ -1,12 +1,16 @@
+import random
 import socket
+
+from utils import contains_end_of_message
 
 class SocketTCP:
     def __init__(self):
         # inicializamos las variables que definen una mascota
         # los datos que aun no sabemos se ponen como None
         self.socketUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.origin_address = ('localhost', 10000)
-        self.destination_address = ('localhost', 10000)
+        self.socketUDP.settimeout(5)
+        self.origin_address = (None, None)
+        self.destination_address = (None, None)
         self.sequence = 0
 
     def parse_segment(self, segment):
@@ -36,43 +40,119 @@ class SocketTCP:
         self.origin_address = address
         self.socketUDP.bind(address)
     
+    # Función que inicia la conexión desde un objeto socketTCP 
+    # con otro que se encuentra escuchando en la dirección address.
+    # Dentro de esta función deberá implementar el lado del cliente
+    # del 3-way handshake. Por simplicidad, haga que su número de secuencia
+    # inicial sea elegido aleatoriamente entre 0 y 100.
     def connect(self, address):
         self.destination_address = address
         tcp_dict = {}
-        tcp_dict['ACK'] = 0
         tcp_dict['SYN'] = 1
+        tcp_dict['ACK'] = 0
         tcp_dict['FIN'] = 0
+        self.sequence = random.randint(0, 100)
         tcp_dict['sequence'] = self.sequence
-        self.sequence += 1
         tcp_dict['data'] = ""
         message = self.create_segment(tcp_dict)
+        print(f"Sending SYN to {address}")
         self.socketUDP.sendto(message.encode(), address)
+        print("message sent")
         while True:
+            print("waiting for response")
             buffer, address = self.socketUDP.recvfrom(1024)
             buffer = buffer.decode()
             tcp_dict = self.parse_segment(buffer)
-            if tcp_dict['ACK'] == 1:
+            if tcp_dict['SYN'] == 1 and tcp_dict['ACK'] == 1:
+                print(f"Received SYN-ACK from {address}")
                 break
-        print("Connected to server")
-    
-    def accept(self):
-        while True:
-            buffer, address = self.socketUDP.recvfrom(1024)
-            buffer = buffer.decode()
-            tcp_dict = self.parse_segment(buffer)
-            if tcp_dict['SYN'] == 1:
-                break
-        self.destination_address = address
         tcp_dict['ACK'] = 1
         tcp_dict['SYN'] = 0
         tcp_dict['FIN'] = 0
-        tcp_dict['sequence'] = self.sequence
-        self.sequence += 1
-        tcp_dict['data'] = ""
+        tcp_dict['sequence'] = tcp_dict['sequence']+1
         message = self.create_segment(tcp_dict)
+        print(f"Sending ACK to {address}")
         self.socketUDP.sendto(message.encode(), address)
-        print("Connected to client")
+        print("message sent")
         return self
+
+    # Función que se encuentra esperando una petición de tipo SYN. 
+    # Dentro de esta función deberá implementar el lado del servidor 
+    # del 3-way handshake. Si el handshake termina de forma exitosa, 
+    # esta función deberá retornar un nuevo objeto del tipo socketTCP 
+    # junto a la dirección donde se encuentra escuchando (bind) dicho objeto. 
+    # La dirección del nuevo socket debe ser distinta a la del socket que 
+    # llamó a accept(). 
+    # Cuide que su nuevo socket esté correctamente asociado a la nueva 
+    # dirección y que recuerde los números de secuencia, pues es este 
+    # nuevo socket el que será utilizado posteriormente para enviar y recibir mensajes.
+    def accept(self):
+        while True:
+            print("waiting for SYN")
+            buffer, address = self.socketUDP.recvfrom(1024)
+            buffer = buffer.decode()
+            tcp_dict = self.parse_segment(buffer)
+            tcp_dict['ACK'] = 1
+            tcp_dict['SYN'] = 1
+            tcp_dict['FIN'] = 0
+            tcp_dict['sequence'] = tcp_dict['sequence']+1
+            message = self.create_segment(tcp_dict)
+            print(f"Sending SYN-ACK to {address}")
+            self.socketUDP.sendto(message.encode(), address)
+            print("message sent")
+            buffer, address = self.socketUDP.recvfrom(1024)
+            print("waiting for ACK")
+            buffer = buffer.decode()
+            tcp_dict = self.parse_segment(buffer)
+            if tcp_dict['ACK'] == 1 and \
+                tcp_dict['SYN'] == 0 and \
+                    tcp_dict['FIN'] == 0 and \
+                        tcp_dict['sequence'] == self.sequence+1:
+                print("ACK received")
+                break
+        print("Connected to client")
+        new_socket = self
+        new_socket.origin_address = self.origin_address
+        new_socket.destination_address = address
+        new_socket.origin_address[1] = new_socket.origin_address[1]+1
+        new_socket.sequence = tcp_dict['sequence']
+        return new_socket, address
     
+    # Esta función será la encargada de manejar Stop & Wait 
+    # desde el lado del emisor tal como vimos en la versión 
+    # simplificada mostrada en el video. Su función send deberá 
+    # encargarse de dividir el mensaje message en trozos de 
+    # tamaño máximo 16 bytes.
+    def send(self, message):
+        end_of_message = "/"
+        byte_inicial = 0
+        message_sent_so_far = ''.encode()
+        buff_size = 16
+        while True:
+            tcp_dict = {}
+            tcp_dict['ACK'] = 0
+            tcp_dict['SYN'] = 0
+            tcp_dict['FIN'] = 0
+            tcp_dict['sequence'] = self.sequence
+            self.sequence += 1
+            max_byte = min(len(message), byte_inicial + buff_size)
+            tcp_dict['data'] = message[byte_inicial:max_byte].decode()
+            message_to_send = self.create_segment(tcp_dict).encode()
+            self.socketUDP.sendto(message_to_send, self.destination_address)
+            # Ahora esperamos por ACK y el sequence
+            buffer, address = self.socketUDP.recvfrom(1024)
+            buffer = buffer.decode()
+            tcp_dict = self.parse_segment(buffer)
+            if tcp_dict['ACK'] == 1 and \
+                tcp_dict['SYN'] == 0 and \
+                    tcp_dict['FIN'] == 0 and \
+                        tcp_dict['sequence'] == self.sequence + max_byte:
+                print("ACK received")
+                self.sequence += max_byte
+                message_sent_so_far += message[byte_inicial:max_byte]    
+            if contains_end_of_message(message_sent_so_far, end_of_message):
+                break
+            byte_inicial += 16
+
 
     
