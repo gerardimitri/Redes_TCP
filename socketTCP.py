@@ -137,6 +137,7 @@ class SocketTCP:
             self.sequence += 1
             max_byte = min(len(message), byte_inicial + buff_size)
             tcp_dict['data'] = message[byte_inicial:max_byte].decode()
+            expected_size_to_send = len(tcp_dict['data'])
             message_to_send = self.create_segment(tcp_dict).encode()
             self.socketUDP.sendto(message_to_send, self.destination_address)
             # Ahora esperamos por ACK y el sequence
@@ -146,13 +147,32 @@ class SocketTCP:
             if tcp_dict['ACK'] == 1 and \
                 tcp_dict['SYN'] == 0 and \
                     tcp_dict['FIN'] == 0 and \
-                        tcp_dict['sequence'] == self.sequence + max_byte:
+                        tcp_dict['sequence'] == self.sequence + expected_size_to_send:
                 print("ACK received")
-                self.sequence += max_byte
+                self.sequence += expected_size_to_send
                 message_sent_so_far += message[byte_inicial:max_byte]    
             if contains_end_of_message(message_sent_so_far, end_of_message):
                 break
             byte_inicial += 16
 
+    def recv(self, buff_size):
+        message = ''.encode()
+        while len(message) > buff_size:
+            buffer, address = self.socketUDP.recvfrom(1024)
+            buffer = buffer.decode()
+            tcp_dict = self.parse_segment(buffer)
+            if tcp_dict['sequence'] == self.sequence:
+                print("Message received")
+                tcp_dict['ACK'] = 1
+                tcp_dict['SYN'] = 0
+                tcp_dict['FIN'] = 0
+                tcp_dict['sequence'] = self.sequence + len(tcp_dict['data'])
+                message_to_send = self.create_segment(tcp_dict).encode()
+                self.socketUDP.sendto(message_to_send, self.destination_address)
+                self.sequence = tcp_dict['sequence']
+                message += tcp_dict['data'].encode()
+                if contains_end_of_message(message, "/"):
+                    break
+        return message
 
     
