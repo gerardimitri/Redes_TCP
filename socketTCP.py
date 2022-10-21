@@ -181,8 +181,49 @@ class SocketTCP:
                 self.socketUDP.sendto(message_to_send, self.destination_address)
                 self.sequence = tcp_dict['sequence']
                 message += tcp_dict['data'].encode()
+
+            # cierre de conexión
+            if tcp_dict['FIN'] == 1:
+                tcp_dict['ACK'] = 1
+                tcp_dict['SYN'] = 0
+                tcp_dict['FIN'] = 1
+                tcp_dict['sequence'] = self.sequence + 1
+                message_to_send = self.create_segment(tcp_dict).encode()
+                self.socketUDP.sendto(message_to_send, self.destination_address)
+                self.sequence = tcp_dict['sequence']
+                message += tcp_dict['data'].encode()
+                break
+            # si len de data es 16 y es el ultimo mensaje se queda en loop infinito
             if len(tcp_dict['data']) < 16:
                 break
         return message
 
-    
+    def close(self):
+        tcp_dict = {}
+        tcp_dict['ACK'] = 0
+        tcp_dict['SYN'] = 0
+        tcp_dict['FIN'] = 1
+        tcp_dict['sequence'] = self.sequence
+        tcp_dict['data'] = ''
+        message_to_send = self.create_segment(tcp_dict).encode()
+        self.socketUDP.sendto(message_to_send, self.destination_address)
+        print("FIN sent")
+        buffer, address = self.socketUDP.recvfrom(1024)
+        buffer = buffer.decode()
+        tcp_dict = self.parse_segment(buffer)
+        print(tcp_dict)
+        if tcp_dict['ACK'] == 1 and \
+            tcp_dict['SYN'] == 0 and \
+                tcp_dict['FIN'] == 1 and \
+                    tcp_dict['sequence'] == self.sequence + 1:
+            print("FIN-ACK received")
+            self.sequence += 1
+        tcp_dict['ACK'] = 1
+        tcp_dict['SYN'] = 0
+        tcp_dict['FIN'] = 0
+        tcp_dict['sequence'] = self.sequence + 1
+        message_to_send = self.create_segment(tcp_dict).encode()
+        self.socketUDP.sendto(message_to_send, self.destination_address)
+        print("ACK sent")
+        self.socketUDP.close()
+        print("Connection closed")

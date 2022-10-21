@@ -17,6 +17,9 @@ client_socketTCP.send(message)
 message = "Mensaje de largo 19".encode()
 client_socketTCP.send(message)
 
+# cierre de conexión
+client_socketTCP.close()
+
 # # mandamos un mensajito
 # print("... Mandamos cositas")
 

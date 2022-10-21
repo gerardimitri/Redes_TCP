@@ -38,6 +38,10 @@ print("Test 3 received:", message_part_1 + message_part_2)
 if (message_part_1 + message_part_2) == "Mensaje de largo 19".encode(): print("Test 3: Passed")
 else: print("Test 3: Failed")
 
+# cierre de conexión
+closed = connection_socketTCP.recv(buff_size)
+if closed == "".encode(): print("Test 4: Passed")
+
 # # nos quedamos esperando, como buen server, a que llegue una petición de conexión
 # print('... Esperando clientes')
 # while True:
