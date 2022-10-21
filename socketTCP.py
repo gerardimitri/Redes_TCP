@@ -1,6 +1,9 @@
 from base64 import decode
+from itertools import count
+from multiprocessing.connection import wait
 import random
 import socket
+from time import sleep
 
 class SocketTCP:
     def __init__(self):
@@ -10,6 +13,7 @@ class SocketTCP:
         self.origin_address = (None, None)
         self.destination_address = (None, None)
         self.sequence = 0
+        self.timeout = 5
 
     def parse_segment(self, segment):
         # parseamos el segmento
@@ -53,17 +57,22 @@ class SocketTCP:
         tcp_dict['sequence'] = self.sequence
         tcp_dict['data'] = ""
         message = self.create_segment(tcp_dict)
-        print(f"Sending SYN to {address}")
-        self.socketUDP.sendto(message.encode(), address)
-        print("message sent")
         while True:
+            print(f"Sending SYN to {address}")
+            self.socketUDP.sendto(message.encode(), address)
+            print("message sent")
             print("waiting for response")
             buffer, address = self.socketUDP.recvfrom(1024)
             buffer = buffer.decode()
             tcp_dict = self.parse_segment(buffer)
-            if tcp_dict['SYN'] == 1 and tcp_dict['ACK'] == 1:
+            if tcp_dict['SYN'] == 1 \
+                and tcp_dict['ACK'] == 1 \
+                    and tcp_dict['FIN'] == 0 \
+                        and tcp_dict['sequence'] == self.sequence+1:
                 print(f"Received SYN-ACK from {address}")
                 break
+            else:
+                continue
         tcp_dict['ACK'] = 1
         tcp_dict['SYN'] = 0
         tcp_dict['FIN'] = 0
@@ -92,12 +101,20 @@ class SocketTCP:
             buffer, address = self.socketUDP.recvfrom(1024)
             buffer = buffer.decode()
             tcp_dict = self.parse_segment(buffer)
-            tcp_dict['ACK'] = 1
-            tcp_dict['SYN'] = 1
-            tcp_dict['FIN'] = 0
-            tcp_dict['sequence'] = tcp_dict['sequence']+1
-            self.sequence = tcp_dict['sequence']
-            message = self.create_segment(tcp_dict)
+            if tcp_dict['SYN'] == 1 \
+                and tcp_dict['ACK'] == 0 \
+                    and tcp_dict['FIN'] == 0:
+                print(f"Received SYN from {address}")
+                break
+            else:
+                continue
+        tcp_dict['ACK'] = 1
+        tcp_dict['SYN'] = 1
+        tcp_dict['FIN'] = 0
+        tcp_dict['sequence'] = tcp_dict['sequence']+1
+        self.sequence = tcp_dict['sequence']
+        message = self.create_segment(tcp_dict)
+        while True:
             print(f"Sending SYN-ACK to {address}")
             self.socketUDP.sendto(message.encode(), address)
             print("message sent")
@@ -113,6 +130,8 @@ class SocketTCP:
                 self.sequence = tcp_dict['sequence']
                 print("ACK received")
                 break
+            else:
+                continue
         print("Connected to client")
         new_socket = self
         new_socket.origin_address = self.origin_address
@@ -127,7 +146,7 @@ class SocketTCP:
     # encargarse de dividir el mensaje message en trozos de 
     # tamaño máximo 16 bytes.
     def send(self, message):
-        self.socketUDP.settimeout(5)
+        self.socketUDP.settimeout(self.timeout)
         decoded_message = message.decode()
         print("----->" + decoded_message)
         message = decoded_message.encode()
@@ -167,38 +186,50 @@ class SocketTCP:
 
 
     def recv(self, buff_size):
+        self.socketUDP.settimeout(self.timeout)
         message = ''.encode()
+        counter = 0
         while len(message) < buff_size:
-            buffer, address = self.socketUDP.recvfrom(1024)
-            buffer = buffer.decode()
-            tcp_dict = self.parse_segment(buffer)
-            if tcp_dict['sequence'] == self.sequence:
-                tcp_dict['ACK'] = 1
-                tcp_dict['SYN'] = 0
-                tcp_dict['FIN'] = 0
-                tcp_dict['sequence'] = self.sequence + len(tcp_dict['data'])
-                message_to_send = self.create_segment(tcp_dict).encode()
-                self.socketUDP.sendto(message_to_send, self.destination_address)
-                self.sequence = tcp_dict['sequence']
-                message += tcp_dict['data'].encode()
+            if counter == 3:
+                print("Connection lost")
+                break
+            try:
+                buffer, address = self.socketUDP.recvfrom(1024)
+                buffer = buffer.decode()
+                tcp_dict = self.parse_segment(buffer)
+                if tcp_dict['sequence'] == self.sequence:
+                    tcp_dict['ACK'] = 1
+                    tcp_dict['SYN'] = 0
+                    tcp_dict['FIN'] = 0
+                    tcp_dict['sequence'] = self.sequence + len(tcp_dict['data'])
+                    message_to_send = self.create_segment(tcp_dict).encode()
+                    self.socketUDP.sendto(message_to_send, self.destination_address)
+                    self.sequence = tcp_dict['sequence']
+                    message += tcp_dict['data'].encode()
 
-            # cierre de conexión
-            if tcp_dict['FIN'] == 1:
-                tcp_dict['ACK'] = 1
-                tcp_dict['SYN'] = 0
-                tcp_dict['FIN'] = 1
-                tcp_dict['sequence'] = self.sequence + 1
-                message_to_send = self.create_segment(tcp_dict).encode()
-                self.socketUDP.sendto(message_to_send, self.destination_address)
-                self.sequence = tcp_dict['sequence']
-                message += tcp_dict['data'].encode()
-                break
-            # si len de data es 16 y es el ultimo mensaje se queda en loop infinito
-            if len(tcp_dict['data']) < 16:
-                break
+                # cierre de conexión
+                if tcp_dict['FIN'] == 1:
+                    tcp_dict['ACK'] = 1
+                    tcp_dict['SYN'] = 0
+                    tcp_dict['FIN'] = 1
+                    tcp_dict['sequence'] = self.sequence + 1
+                    message_to_send = self.create_segment(tcp_dict).encode()
+                    self.socketUDP.sendto(message_to_send, self.destination_address)
+                    self.sequence = tcp_dict['sequence']
+                    message += tcp_dict['data'].encode()
+                    break
+                # si len de data es 16 y es el ultimo mensaje se queda en loop infinito
+                if len(tcp_dict['data']) < 16:
+                    break
+            except socket.timeout:
+                print("Timeout")
+                print("Resending message")
+                counter += 1
+                continue
         return message
 
     def close(self):
+        self.socketUDP.settimeout(self.timeout)
         tcp_dict = {}
         tcp_dict['ACK'] = 0
         tcp_dict['SYN'] = 0
@@ -206,24 +237,45 @@ class SocketTCP:
         tcp_dict['sequence'] = self.sequence
         tcp_dict['data'] = ''
         message_to_send = self.create_segment(tcp_dict).encode()
-        self.socketUDP.sendto(message_to_send, self.destination_address)
-        print("FIN sent")
-        buffer, address = self.socketUDP.recvfrom(1024)
-        buffer = buffer.decode()
-        tcp_dict = self.parse_segment(buffer)
-        print(tcp_dict)
-        if tcp_dict['ACK'] == 1 and \
-            tcp_dict['SYN'] == 0 and \
-                tcp_dict['FIN'] == 1 and \
-                    tcp_dict['sequence'] == self.sequence + 1:
-            print("FIN-ACK received")
-            self.sequence += 1
+        counter = 0
+        closed = False
+        while True:
+            try:
+                self.socketUDP.sendto(message_to_send, self.destination_address)
+                print("FIN sent")
+                buffer, address = self.socketUDP.recvfrom(1024)
+                buffer = buffer.decode()
+                tcp_dict = self.parse_segment(buffer)
+                print(tcp_dict)
+                if tcp_dict['ACK'] == 1 and \
+                    tcp_dict['SYN'] == 0 and \
+                        tcp_dict['FIN'] == 1 and \
+                            tcp_dict['sequence'] == self.sequence + 1:
+                    print("FIN-ACK received")
+                    self.sequence += 1
+                    closed = True
+                    break
+                else:
+                    continue
+            except socket.timeout:
+                counter += 1
+                print("Timeout")
+                if counter == 3:
+                    print("Force closing")
+                    break
+                else:
+                    continue
         tcp_dict['ACK'] = 1
         tcp_dict['SYN'] = 0
         tcp_dict['FIN'] = 0
         tcp_dict['sequence'] = self.sequence + 1
         message_to_send = self.create_segment(tcp_dict).encode()
-        self.socketUDP.sendto(message_to_send, self.destination_address)
-        print("ACK sent")
+        if closed:
+            for _ in range(3):
+                self.socketUDP.sendto(message_to_send, self.destination_address)
+                print("ACK sent")
+                sleep(self.timeout)        
+        # self.socketUDP.sendto(message_to_send, self.destination_address)
+        # print("ACK sent")
         self.socketUDP.close()
         print("Connection closed")
