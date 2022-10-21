@@ -1,14 +1,12 @@
+from base64 import decode
 import random
 import socket
-
-from utils import contains_end_of_message
 
 class SocketTCP:
     def __init__(self):
         # inicializamos las variables que definen una mascota
         # los datos que aun no sabemos se ponen como None
         self.socketUDP = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socketUDP.settimeout(5)
         self.origin_address = (None, None)
         self.destination_address = (None, None)
         self.sequence = 0
@@ -70,10 +68,12 @@ class SocketTCP:
         tcp_dict['SYN'] = 0
         tcp_dict['FIN'] = 0
         tcp_dict['sequence'] = tcp_dict['sequence']+1
+        self.sequence = tcp_dict['sequence']
         message = self.create_segment(tcp_dict)
         print(f"Sending ACK to {address}")
         self.socketUDP.sendto(message.encode(), address)
         print("message sent")
+        print("Connection established")
         return self
 
     # Función que se encuentra esperando una petición de tipo SYN. 
@@ -96,25 +96,28 @@ class SocketTCP:
             tcp_dict['SYN'] = 1
             tcp_dict['FIN'] = 0
             tcp_dict['sequence'] = tcp_dict['sequence']+1
+            self.sequence = tcp_dict['sequence']
             message = self.create_segment(tcp_dict)
             print(f"Sending SYN-ACK to {address}")
             self.socketUDP.sendto(message.encode(), address)
             print("message sent")
-            buffer, address = self.socketUDP.recvfrom(1024)
             print("waiting for ACK")
+            buffer, address = self.socketUDP.recvfrom(1024)
             buffer = buffer.decode()
             tcp_dict = self.parse_segment(buffer)
+            print(tcp_dict)
             if tcp_dict['ACK'] == 1 and \
                 tcp_dict['SYN'] == 0 and \
                     tcp_dict['FIN'] == 0 and \
                         tcp_dict['sequence'] == self.sequence+1:
+                self.sequence = tcp_dict['sequence']
                 print("ACK received")
                 break
         print("Connected to client")
         new_socket = self
         new_socket.origin_address = self.origin_address
         new_socket.destination_address = address
-        new_socket.origin_address[1] = new_socket.origin_address[1]+1
+        new_socket.origin_address = (new_socket.origin_address[0], new_socket.origin_address[1]+1)
         new_socket.sequence = tcp_dict['sequence']
         return new_socket, address
     
@@ -124,45 +127,52 @@ class SocketTCP:
     # encargarse de dividir el mensaje message en trozos de 
     # tamaño máximo 16 bytes.
     def send(self, message):
-        end_of_message = "/"
+        self.socketUDP.settimeout(5)
+        decoded_message = message.decode()
+        print("----->" + decoded_message)
+        message = decoded_message.encode()
         byte_inicial = 0
         message_sent_so_far = ''.encode()
         buff_size = 16
-        while True:
+        while len(message) > byte_inicial:
             tcp_dict = {}
             tcp_dict['ACK'] = 0
             tcp_dict['SYN'] = 0
             tcp_dict['FIN'] = 0
             tcp_dict['sequence'] = self.sequence
-            self.sequence += 1
             max_byte = min(len(message), byte_inicial + buff_size)
             tcp_dict['data'] = message[byte_inicial:max_byte].decode()
+            print(f"Sending {tcp_dict['data']} to {self.destination_address}")
             expected_size_to_send = len(tcp_dict['data'])
             message_to_send = self.create_segment(tcp_dict).encode()
-            self.socketUDP.sendto(message_to_send, self.destination_address)
-            # Ahora esperamos por ACK y el sequence
-            buffer, address = self.socketUDP.recvfrom(1024)
-            buffer = buffer.decode()
-            tcp_dict = self.parse_segment(buffer)
-            if tcp_dict['ACK'] == 1 and \
-                tcp_dict['SYN'] == 0 and \
-                    tcp_dict['FIN'] == 0 and \
-                        tcp_dict['sequence'] == self.sequence + expected_size_to_send:
-                print("ACK received")
-                self.sequence += expected_size_to_send
-                message_sent_so_far += message[byte_inicial:max_byte]    
-            if contains_end_of_message(message_sent_so_far, end_of_message):
-                break
-            byte_inicial += 16
+            try:
+                self.socketUDP.sendto(message_to_send, self.destination_address)
+                print(f"Sending {expected_size_to_send} bytes to {self.destination_address}")
+                buffer, address = self.socketUDP.recvfrom(1024)
+                buffer = buffer.decode()
+                tcp_dict = self.parse_segment(buffer)
+                print(tcp_dict)
+                if tcp_dict['ACK'] == 1 and \
+                    tcp_dict['SYN'] == 0 and \
+                        tcp_dict['FIN'] == 0 and \
+                            tcp_dict['sequence'] == self.sequence + expected_size_to_send:
+                    print("ACK received")
+                    self.sequence += expected_size_to_send
+                    message_sent_so_far += message[byte_inicial:max_byte]
+                    byte_inicial += expected_size_to_send 
+            except socket.timeout:
+                print("Timeout")
+                print("Resending message")
+                continue
+
 
     def recv(self, buff_size):
         message = ''.encode()
-        while len(message) > buff_size:
+        while len(message) < buff_size:
             buffer, address = self.socketUDP.recvfrom(1024)
             buffer = buffer.decode()
             tcp_dict = self.parse_segment(buffer)
             if tcp_dict['sequence'] == self.sequence:
-                print("Message received")
                 tcp_dict['ACK'] = 1
                 tcp_dict['SYN'] = 0
                 tcp_dict['FIN'] = 0
@@ -171,8 +181,8 @@ class SocketTCP:
                 self.socketUDP.sendto(message_to_send, self.destination_address)
                 self.sequence = tcp_dict['sequence']
                 message += tcp_dict['data'].encode()
-                if contains_end_of_message(message, "/"):
-                    break
+            if len(tcp_dict['data']) < 16:
+                break
         return message
 
     
