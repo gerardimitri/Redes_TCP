@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import socketTCP
 # importamos utils completo
 from utils import *
@@ -9,12 +8,19 @@ print('Creando socket - Servidor')
 # server_socketTCP = SocketTCP()
 
 # hacemos bind del server socket a la dirección server_address
-address = ('localhost', 8001)
+address = ('localhost', 8000)
 # server_socketTCP.bind(server_address)
 # SERVER
 server_socketTCP = socketTCP.SocketTCP()
 server_socketTCP.bind(address)
 connection_socketTCP, new_address = server_socketTCP.accept()
+
+# test 0
+buff_size = 70
+full_message = connection_socketTCP.recv(buff_size)
+print("Test 0 received:", full_message)
+if full_message == "hola, este  es un mensaje de pruebas, por favor no modificar. Gracias.".encode(): print("Test 0: Passed")
+else: print("Test 0: Failed")
 
 # test 1
 buff_size = 16
