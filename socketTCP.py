@@ -206,7 +206,6 @@ class SocketTCP:
                     self.socketUDP.sendto(message_to_send, self.destination_address)
                     self.sequence = tcp_dict['sequence']
                     message += tcp_dict['data'].encode()
-
                 # cierre de conexión
                 if tcp_dict['FIN'] == 1:
                     tcp_dict['ACK'] = 1
