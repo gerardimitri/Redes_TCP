@@ -48,6 +48,7 @@ class SocketTCP:
     # del 3-way handshake. Por simplicidad, haga que su número de secuencia
     # inicial sea elegido aleatoriamente entre 0 y 100.
     def connect(self, address):
+        self.socketUDP.settimeout(self.timeout)
         self.destination_address = address
         tcp_dict = {}
         tcp_dict['SYN'] = 1
@@ -58,20 +59,25 @@ class SocketTCP:
         tcp_dict['data'] = ""
         message = self.create_segment(tcp_dict)
         while True:
-            print(f"Sending SYN to {address}")
-            self.socketUDP.sendto(message.encode(), address)
-            print("message sent")
-            print("waiting for response")
-            buffer, address = self.socketUDP.recvfrom(1024)
-            buffer = buffer.decode()
-            tcp_dict = self.parse_segment(buffer)
-            if tcp_dict['SYN'] == 1 \
-                and tcp_dict['ACK'] == 1 \
-                    and tcp_dict['FIN'] == 0 \
-                        and tcp_dict['sequence'] == self.sequence+1:
-                print(f"Received SYN-ACK from {address}")
-                break
-            else:
+            try:
+                print(f"Sending SYN to {address}")
+                self.socketUDP.sendto(message.encode(), address)
+                print("message sent")
+                print("waiting for response")
+                buffer, address = self.socketUDP.recvfrom(1024)
+                buffer = buffer.decode()
+                tcp_dict = self.parse_segment(buffer)
+                if tcp_dict['SYN'] == 1 \
+                    and tcp_dict['ACK'] == 1 \
+                        and tcp_dict['FIN'] == 0 \
+                            and tcp_dict['sequence'] == self.sequence+1:
+                    print(f"Received SYN-ACK from {address}")
+                    break
+                else:
+                    continue
+            except socket.timeout:
+                print("Timeout")
+                print("Resending message")
                 continue
         tcp_dict['ACK'] = 1
         tcp_dict['SYN'] = 0
@@ -81,6 +87,18 @@ class SocketTCP:
         message = self.create_segment(tcp_dict)
         print(f"Sending ACK to {address}")
         self.socketUDP.sendto(message.encode(), address)
+        while True:
+            try:
+                buffer, address = self.socketUDP.recvfrom(1024)
+                if tcp_dict['SYN'] == 1 \
+                    and tcp_dict['ACK'] == 1 \
+                        and tcp_dict['FIN'] == 0 \
+                            and tcp_dict['sequence'] == self.sequence+1:
+                    self.socketUDP.sendto(message.encode(), address)
+                    print(f"Resending ACK to {address}")
+                    continue
+            except socket.timeout:
+                break
         print("message sent")
         print("Connection established")
         return self
