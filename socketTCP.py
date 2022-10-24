@@ -193,7 +193,13 @@ class SocketTCP:
                     print("ACK received")
                     self.sequence += expected_size_to_send
                     message_sent_so_far += message[byte_inicial:max_byte]
-                    byte_inicial += expected_size_to_send 
+                    byte_inicial += expected_size_to_send
+                else:
+                    if tcp_dict['ACK'] !=1:
+                        print("ACK not received")
+                    elif tcp_dict['sequence'] != self.sequence + expected_size_to_send:
+                        print("Wrong sequence")
+                    continue
             except socket.timeout:
                 print("Timeout")
                 print("Resending message")
