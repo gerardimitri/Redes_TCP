@@ -1,6 +1,3 @@
-from base64 import decode
-from itertools import count
-from multiprocessing.connection import wait
 import random
 import socket
 from time import sleep
@@ -196,7 +193,13 @@ class SocketTCP:
                     print("ACK received")
                     self.sequence += expected_size_to_send
                     message_sent_so_far += message[byte_inicial:max_byte]
-                    byte_inicial += expected_size_to_send 
+                    byte_inicial += expected_size_to_send
+                else:
+                    if tcp_dict['ACK'] !=1:
+                        print("ACK not received")
+                    elif tcp_dict['sequence'] != self.sequence + expected_size_to_send:
+                        print("Wrong sequence")
+                    continue
             except socket.timeout:
                 print("Timeout")
                 print("Resending message")
@@ -210,6 +213,8 @@ class SocketTCP:
         while len(message) < buff_size:
             if counter == 3:
                 print("Connection lost")
+                self.socketUDP.close()
+                print("Connection closed")
                 break
             try:
                 buffer, address = self.socketUDP.recvfrom(1024)
@@ -234,6 +239,8 @@ class SocketTCP:
                     self.socketUDP.sendto(message_to_send, self.destination_address)
                     self.sequence = tcp_dict['sequence']
                     message += tcp_dict['data'].encode()
+                    self.socketUDP.close()
+                    print("Connection closed")
                     break
                 # si len de data es 16 y es el ultimo mensaje se queda en loop infinito
                 if len(tcp_dict['data']) < 16:
