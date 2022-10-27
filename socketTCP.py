@@ -213,6 +213,8 @@ class SocketTCP:
         while len(message) < buff_size:
             if counter == 3:
                 print("Connection lost")
+                self.socketUDP.close()
+                print("Connection closed")
                 break
             try:
                 buffer, address = self.socketUDP.recvfrom(1024)
@@ -237,6 +239,8 @@ class SocketTCP:
                     self.socketUDP.sendto(message_to_send, self.destination_address)
                     self.sequence = tcp_dict['sequence']
                     message += tcp_dict['data'].encode()
+                    self.socketUDP.close()
+                    print("Connection closed")
                     break
                 # si len de data es 16 y es el ultimo mensaje se queda en loop infinito
                 if len(tcp_dict['data']) < 16:
